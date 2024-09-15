@@ -5,8 +5,14 @@ from api import cdr_view
 import xml.etree.ElementTree as ET
 import json
 import xmltodict
+import leafmap.foliumap as leafmap
+import folium
+from folium.plugins import Draw
+from streamlit_folium import st_folium
+import time
 
-st.set_page_config(page_title="RITHMS CDR Visualizer", page_icon="📊")
+
+st.set_page_config(page_title="RITHMS CDR Visualizer", page_icon="📊", layout="wide")
 tab1, tab2, tab3 = st.tabs(["CSV/XSLX", "XML/JSON", "Generate CDR"])
 
 with tab1:
@@ -26,7 +32,7 @@ with tab1:
     try:
         if uploaded_file is not None:
             try:
-                df = pd.read_csv(uploaded_file, sep=";")
+                df = pd.read_csv(uploaded_file, sep=",")
                 st.write(df)
                 st.json(df.to_dict(orient="records"))
             except Exception:
@@ -39,27 +45,51 @@ with tab1:
 
 
 with tab3:
-    st.subheader("Please introduce the latitude and longitude of the interest zone.")
-    st.subheader(
-        "The values must be float numbers. You should give an interval for each of them. Example of a longitude value: 23.1234"
+    st.write("Please select the interest zone by drawing a rectangle on the map.")
+
+    if "map_key" not in st.session_state:
+        st.session_state.map_key = str(time.time())
+
+    m = folium.Map(
+        location=[46.087035, 25.115833],
+        zoom_start=6,
+        key=st.session_state.map_key,
     )
-    st.subheader("Longitude")
-    longitude1 = st.number_input(
-        "Enter left head of the interval", min_value=0.0, step=0.00001, key=1
-    )
-    longitude2 = st.number_input(
-        "Enter right head of the interval", min_value=0.0, step=0.00001, key=2
-    )
-    st.write("Introduced interval is: ", longitude1, longitude2)
-    st.subheader("Latitude")
-    latitude1 = st.number_input(
-        "Enter left head of the interval", min_value=0.0, step=0.00001, key=3
-    )
-    latitude2 = st.number_input(
-        "Enter right head of the interval", min_value=0.0, step=0.00001, key=4
-    )
-    st.write("Introduced interval is: ", latitude1, latitude2)
-    print(longitude1, longitude2, latitude1, latitude2)
+
+    ghelaiesti = folium.Marker([46.565577, 26.394196], popup="Ghelaiesti").add_to(m)
+    cucuteni = folium.Marker([46.94835, 26.65668], popup="Cucuteni").add_to(m)
+    turcoaia = folium.Marker([45.14311, 28.19508], popup="Turcoaia").add_to(m)
+
+    Draw(export=True, draw_options={
+        'polyline': False,
+        'polygon': False,
+        'circle': False,
+        'marker': False,
+        'circlemarker': False,
+        'rectangle': True,
+    }).add_to(m)
+    output = st_folium(m, width=900, height=600, key=st.session_state.map_key + "b")
+
+    if st.button("Reload Map", key="reload"):
+        st.session_state.map_key = str(time.time())
+        st.experimental_rerun()
+
+    print(output)
+    try:
+        longitude1 = output["last_active_drawing"]["geometry"]["coordinates"][0][0][0]
+        longitude2 = output["last_active_drawing"]["geometry"]["coordinates"][0][2][0]
+        latitude1 = output["last_active_drawing"]["geometry"]["coordinates"][0][0][1]
+        latitude2 = output["last_active_drawing"]["geometry"]["coordinates"][0][2][1]
+        st.write(
+            "The selected coordinates are: ",
+            longitude1,
+            longitude2,
+            latitude1,
+            latitude2,
+        )
+
+    except Exception as e:
+        print(e)
 
     try:
         cdrs = cdr_view(latitude1, latitude2, longitude1, longitude2)
@@ -67,7 +97,7 @@ with tab3:
 
     except Exception as e:
         print(e)
-        st.write("Please introduce the values for the latitude and longitude!")
+        st.write("Please select the interest zone!")
 
     if st.button("Generate CDR"):
         st.write(cdrs)
@@ -78,7 +108,7 @@ with tab3:
 
         # Create a file object to write the JSON data to
         file = open("./datasets/cdrs.json", "w")
-
+        cdrs.to_csv("./datasets/synthetic_cdr.csv", index=False)
         # Write the JSON data to the file
         file.write(json_cdrs)
 

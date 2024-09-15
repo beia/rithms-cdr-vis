@@ -10,6 +10,20 @@ import uuid
 
 
 def cdr_view(latitude1, latitude2, longitude1, longitude2):
+    """
+    Generate CDRs (Call Detail Records) based on the given latitude and longitude ranges.
+
+    Parameters:
+    latitude1 (float): The starting latitude range.
+    latitude2 (float): The ending latitude range.
+    longitude1 (float): The starting longitude range.
+    longitude2 (float): The ending longitude range.
+
+    Returns:
+    pandas.DataFrame: A DataFrame containing the generated CDRs.
+
+    """
+
     print(os.getcwd())
     ro = pd.read_csv("utils/Romania.csv")
     ro.columns = [
@@ -28,6 +42,7 @@ def cdr_view(latitude1, latitude2, longitude1, longitude2):
         "updated",
         "averageSignal",
     ]
+    date_sintetice = pd.read_csv("utils/date_sintetice_noi_v1.csv")
 
     df = ro[
         (ro["lat"] >= latitude1)
@@ -43,20 +58,15 @@ def cdr_view(latitude1, latitude2, longitude1, longitude2):
     for index, row in df.iterrows():
         cell_dict[row["cell"]] = (row["lon"], row["lat"])
 
-    caller_ids = {
-        "+40734657481": "123456789012345",
-        "+40734657491": "234567890123456",
-        "+40734657381": "345678901234567",
-        "+40734653481": "456789012345678",
-    }
+    def generate_phone_number():
+        # Generate a random 10-digit phone number starting with "+4073"
+        phone_number = "+4073" + "".join(random.choice("0123456789") for _ in range(6))
+        return phone_number
 
-    # Define list of possible callee IDs and corresponding IMEIs
-    callee_ids = {
-        "+40734653381": "567890123456789",
-        "+40732657481": "678901234567890",
-        "+40734653481": "789012345678901",
-        "+40734657421": "890123456789012",
-    }
+    def generate_imei_number():
+        # Generate a random 15-digit IMEI number
+        imei = "".join(random.choice("0123456789") for _ in range(15))
+        return imei
 
     # Define list of possible cell IDs
     cell_ids = cell_ids_cdr
@@ -67,32 +77,34 @@ def cdr_view(latitude1, latitude2, longitude1, longitude2):
 
     # Define list to hold CDRs
     cdrs = []
+    caller_callee_pairs = []
 
-    # Generate 100 random CDRs
-    for i in range(100):
+    # Generate and store a pool of caller-callee pairs
+    for i in range(100):  # You can adjust the number of pairs as needed
+        caller_id = generate_phone_number()
+        callee_id = generate_phone_number()
+        caller_callee_pairs.append((caller_id, callee_id))
+
+    # Generate 2000 random CDRs
+    for i in range(2000):
         # Generate random values for CDR fields
-        caller_id, caller_imei = random.choice(list(caller_ids.items()))
-        callee_id, callee_imei = random.choice(list(callee_ids.items()))
-        call_start_time = datetime.datetime.now() - datetime.timedelta(
-            minutes=random.randint(1, 60)
-        )
-        call_end_time = call_start_time + datetime.timedelta(
-            minutes=random.randint(1, 10)
-        )
-        call_duration = (call_end_time - call_start_time).total_seconds()
+        caller_imei = generate_imei_number()
+        callee_id, callee_imei = generate_phone_number(), generate_imei_number()
+
+        caller_id = date_sintetice["apelant"][i]
+
+        call_start_time = date_sintetice["datetime"][i]
+        call_end_time = date_sintetice["ora sfarsit"][i]
+        call_duration = date_sintetice["secunde"][i]
         call_type = random.choice(["inbound", "outbound"])
-        call_result = random.choice(["answered", "busy", "no answer", "failed"])
+        call_result = random.choice(["answered"])
 
         # This needs to be changed.
         cell_id = random.choice(cell_ids)
-        imsi = "".join(random.choice("0123456789") for i in range(15))
+        caller_imsi = "".join(random.choice("0123456789") for i in range(15))
+        callee_imsi = "".join(random.choice("0123456789") for i in range(15))
         longitudine_cdr = cell_dict[cell_id][0]
         latitudine_cdr = cell_dict[cell_id][1]
-        qos_metrics = {
-            "jitter": random.uniform(0.1, 1),
-            "packet_loss": random.uniform(0, 5),
-            "latency": random.uniform(10, 100),
-        }
 
         # Generate a unique identifier using uuid
         unique_id = str(uuid.uuid4())
@@ -110,16 +122,12 @@ def cdr_view(latitude1, latitude2, longitude1, longitude2):
             "call_type": call_type,
             "call_result": call_result,
             "cell_id": cell_id,
-            "imei": callee_imei,
-            "imsi": imsi,
-            "direction": "incoming" if call_type == "inbound" else "outgoing",
+            "caller_imsi": caller_imsi,
+            "callee_imsi": callee_imsi,
+            # "direction": "incoming" if call_type == "inbound" else "outgoing",
+            "service_type": "voice",
             "longitudine": longitudine_cdr,
             "latitudine": latitudine_cdr,
-            "service_type": "voice",
-            "billing_info": "Unknown",
-            "jitter": qos_metrics["jitter"],
-            "packet_loss": qos_metrics["packet_loss"],
-            "latency": qos_metrics["latency"],
         }
 
         # Add the CDR to the list of CDRs
@@ -128,5 +136,5 @@ def cdr_view(latitude1, latitude2, longitude1, longitude2):
             for key, value in cdr.items():
                 if isinstance(value, np.int64):
                     cdr[key] = int(value)
-    # return JsonResponse({"cdrs": cdrs})
+
     return pd.DataFrame(cdrs)
